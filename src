@@ -1,0 +1,305 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <ctype.h>
+
+#define MAX_DIMENSION 32
+#define MIN_DIMENSION 2
+#define MAX_TREASURES ((MIN_DIMENSION * MAX_DIMENSION) / 4)
+#define TREASURE_CODE_LENGTH 4
+
+typedef struct {
+    char code[TREASURE_CODE_LENGTH + 1];
+    int x, y;
+    int found;
+} Treasure;
+
+/* Function Prototypes */
+char** createMap(int width, int height);
+void freeMap(char **map, int height);
+int getValidInteger(int min, int max);
+void displayMenu();
+void dig(int x, int y);
+int allTreasuresFound();
+void initializeTreasures();
+void displayMap();
+void placeTreasures();
+int isTreasureAt(int x, int y);
+void markMap(int x, int y, char symbol);
+void getTreasureCode(int treasureNumber, Treasure *treasures, int numTreasures);
+
+char **map;
+Treasure *treasures;
+int numTreasures;
+int cheatMode = 0;
+int width, height, allFound, choice, treasureIndex;
+int i, y, x;
+
+int main() {
+    srand(time(0));
+
+    printf("Enter map width (%d - %d): ", MIN_DIMENSION, MAX_DIMENSION);
+    width = getValidInteger(MIN_DIMENSION, MAX_DIMENSION);
+
+    printf("Enter map height (%d - %d): ", MIN_DIMENSION, MAX_DIMENSION);
+    height = getValidInteger(MIN_DIMENSION, MAX_DIMENSION);
+
+    map = createMap(width, height);
+
+    printf("Enter number of treasures (1 - %d): ", MAX_TREASURES);
+    numTreasures = getValidInteger(1, MAX_TREASURES);
+
+    initializeTreasures();
+
+
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++) {
+            map[y][x] = ' ';
+        }
+    }
+
+    allFound = 0;
+    while (!allFound) {
+        displayMenu();
+        if (scanf("%d", &choice) == EOF) {
+            printf("EOF encountered. Exiting.\n");
+            exit(3);
+        }
+
+        switch (choice) {
+            case 1: {
+                int x, y;
+                printf("Where would you like to dig?\nx = ");
+                if (scanf("%d", &x) == EOF) {
+                    printf("EOF encountered. Exiting.\n");
+                    exit(3);
+                }
+                printf("y = ");
+                if (scanf("%d", &y) == EOF) {
+                    printf("EOF encountered. Exiting.\n");
+                    exit(3);
+                }
+                if (x >= 0 && x < width && y >= 0 && y < height) {
+                    dig(x, y);
+                } else {
+                    printf("Invalid coordinates.\n");
+                }
+                break;
+            }
+            case 2:
+                printf("Exiting game.\n");
+                allFound = 1;
+                break;
+            case 3:
+                if (cheatMode) {
+                    printf("Cheat mode already enabled!\n");
+                } else {
+                    cheatMode = 1;
+                    printf("Cheat mode enabled!\n");
+                }
+                break;
+            default:
+                printf("Invalid choice. Please try again.\n");
+        }
+
+
+        allFound = 1;
+        for (i = 0; i < numTreasures; i++) {
+            if (!treasures[i].found) {
+                allFound = 0;
+                break;
+            }
+        }
+
+        if (allFound) {
+            printf("Congratulations, you found all the treasures!\n");
+        } else {
+            displayMap();
+        }
+    }
+    freeMap(map, height);
+    free(treasures);
+
+    return EXIT_SUCCESS;
+}
+
+char **createMap(int width, int height) {
+    char **map;
+    int i;
+
+    map = (char **)malloc(height * sizeof(char *));
+    if (map == NULL) {
+        fprintf(stderr, "Failed to allocate memory for the map.\n");
+        exit(4);
+    }
+
+    for (i = 0; i < height; i++) {
+        map[i] = (char *)malloc(width * sizeof(char));
+        if (map[i] == NULL) {
+            fprintf(stderr, "Failed to allocate memory for map row.\n");
+            freeMap(map, i);
+            exit(4);
+        }
+    }
+
+    return map;
+}
+
+void freeMap(char **map, int height) {
+    for (i = 0; i < height; i++) {
+        free(map[i]);
+    }
+    free(map);
+}
+
+int getValidInteger(int min, int max) {
+    int input, status;
+    do {
+        status = scanf("%d", &input);
+        if (status == EOF) {
+            printf("EOF encountered. Exiting.\n");
+            exit(3);
+        } else if (status != 1) {
+            while (fgetc(stdin) != '\n');
+            printf("Invalid input. Please enter a number: ");
+        } else if (input < min || input > max) {
+            printf("Input out of range. Please enter a value between %d and %d: ", min, max);
+        }
+    } while (input < min || input > max || status != 1);
+    return input;
+}
+
+void displayMenu() {
+    printf("1 - Dig at a spot  | 2 - Exit Game      | 3 - Cheat!\n");
+    if (cheatMode) {
+        printf("CHEAT -> ");
+    } else {
+        printf("-> ");
+    }
+}
+
+void dig(int x, int y) {
+    if (map[y][x] != ' ') {
+        printf("This spot has already been dug.\n");
+        return;
+    }
+
+    treasureIndex = isTreasureAt(x, y);
+    if (treasureIndex != -1) {
+        printf("Congratulations, you found a treasure! (code: %s)\n", treasures[treasureIndex].code);
+        treasures[treasureIndex].found = 1;
+        markMap(x, y, '$');
+
+        if (cheatMode) {
+            printf("Congratulations, you found all the treasures!\n");
+            exit(0);
+        }
+
+        return;
+    }
+
+    markMap(x, y, 'x');
+    printf("You found nothing there!\n");
+}
+
+int allTreasuresFound() {
+    for (i = 0; i < numTreasures; i++) {
+        if (!treasures[i].found) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+void initializeTreasures() {
+    treasures = malloc(numTreasures * sizeof(Treasure));
+    if (!treasures) {
+        fprintf(stderr, "Memory allocation failed for treasures.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    for (i = 0; i < numTreasures; i++) {
+        getTreasureCode(i, treasures, numTreasures);
+    }
+
+    placeTreasures();
+}
+
+void getTreasureCode(int treasureNumber, Treasure *treasures, int numTreasures) {
+    char inputCode[TREASURE_CODE_LENGTH + 1];
+    int valid;
+    do {
+        printf("Enter treasure #%d code (e.g. T001): ", treasureNumber + 1);
+        scanf("%4s", inputCode);
+
+        valid = 1;
+        if (inputCode[0] != 'T') {
+            printf("Treasure codes must start with a 'T'\n");
+            valid = 0;
+        }
+
+        for (i = 1; i < TREASURE_CODE_LENGTH; i++) {
+            if (!isdigit(inputCode[i])) {
+                printf("Treasure codes must be a 'T' followed by 3 digits\n");
+                valid = 0;
+                break;
+            }
+        }
+
+        for (i = 0; i < treasureNumber && valid; i++) {
+            if (strcmp(inputCode, treasures[i].code) == 0) {
+                printf("Treasure code already in use.\n");
+                valid = 0;
+            }
+        }
+    } while (!valid);
+
+    strcpy(treasures[treasureNumber].code, inputCode);
+}
+
+void displayMap() {
+    printf("Map:\n\n   ");
+    for (i = 0; i < width; i++) {
+        printf("%d", i % 10);
+    }
+    printf("\n   ------------\n");
+    for (y = 0; y < height; y++) {
+        printf("%02d|", y);
+        for (x = 0; x < width; x++) {
+            char symbol = map[y][x];
+            if (cheatMode && symbol == ' ' && isTreasureAt(x, y) != -1) {
+                symbol = '!';
+            }
+            printf("%c", symbol);
+        }
+        printf("\n");
+    }
+}
+
+void placeTreasures() {
+    for (i = 0; i < numTreasures; ++i) {
+        int x, y;
+        do {
+            x = rand() % width;
+            y = rand() % height;
+        } while (isTreasureAt(x, y) != -1);
+
+        treasures[i].x = x;
+        treasures[i].y = y;
+        treasures[i].found = 0;
+    }
+}
+
+int isTreasureAt(int x, int y) {
+    for (i = 0; i < numTreasures; ++i) {
+        if (treasures[i].x == x && treasures[i].y == y && !treasures[i].found) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void markMap(int x, int y, char symbol) {
+    map[y][x] = symbol;
+}
